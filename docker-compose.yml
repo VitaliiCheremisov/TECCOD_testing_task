@@ -1,0 +1,41 @@
+version: "3.8"
+
+services:
+  opensearch:
+    image: opensearchproject/opensearch:2.13.0
+    container_name: opensearch
+    environment:
+      - discovery.type=single-node
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD="Zz9kN3tR1pL6xY8vQ2mB7!C5"
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -k -u admin:Zz9kN3tR1pL6xY8vQ2mB7!C5 https://localhost:9200 >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build: .
+    container_name: app
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    environment:
+      - OS_HOST=opensearch
+      - OS_PORT=9200
+      - OS_USER=admin
+      - OS_PASS="Zz9kN3tR1pL6xY8vQ2mB7!C5"
+      - INDEX_NAME=articles_index
+    ports:
+      - "8000:8000"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    restart: unless-stopped
+
+
