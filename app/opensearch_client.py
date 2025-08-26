@@ -2,8 +2,23 @@ import os
 from typing import Optional
 from opensearchpy import OpenSearch
 
+ALLOWED_CONTENT_TYPES = ["article", "blog", "news", "faq"]
+
 
 def get_opensearch_client() -> OpenSearch:
+    """
+    Создает и возвращает клиент OpenSearch, подключаясь к кластеру по данным
+    из переменных окружения:
+
+    - OS_HOST (по умолчанию: "localhost") — хост OpenSearch
+    - OS_PORT (по умолчанию: 9200) — порт OpenSearch
+    - OS_USER (по умолчанию: "admin") — имя пользователя
+    - OS_PASS (по умолчанию: "admin") — пароль
+
+    В официальном Docker-образе безопасность включена по умолчанию, поэтому
+    используется SSL-подключение с отключенной проверкой сертификатов
+    (verify_certs=False) для локальной разработки.
+    """
     host = os.getenv("OS_HOST", "localhost")
     port = int(os.getenv("OS_PORT", "9200"))
     user = os.getenv("OS_USER", "admin")
@@ -19,6 +34,15 @@ def get_opensearch_client() -> OpenSearch:
 
 
 def ensure_index(index_name: str) -> None:
+    """
+    Гарантирует наличие индекса с заданным именем и схемой.
+
+    Если индекс не существует, создаёт его с настройками (1 шард, 0 реплик)
+    и маппингом полей:
+      - title: text — полнотекстовый поиск по заголовку
+      - content: text — полнотекстовый поиск по содержимому
+      - content_type: keyword — точное значение типа контента
+    """
     client = get_opensearch_client()
     mapping = {
         "settings": {
@@ -36,12 +60,18 @@ def ensure_index(index_name: str) -> None:
     if not client.indices.exists(index=index_name):
         client.indices.create(index=index_name, body=mapping)
 
-ALLOWED_CONTENT_TYPES = ["article", "blog", "news", "faq"]
-
 
 def seed_documents(index_name: str) -> int:
-    client = get_opensearch_client()
+    """
+    Загружает тестовые документы в указанный индекс.
 
+    Создаёт 5 документов разных типов (article, blog, news, faq) с русскими
+    заголовками и содержимым для демонстрации поиска. Каждый документ
+    индексируется с refresh=True для немедленной доступности при поиске.
+
+    Возвращает количество успешно загруженных документов.
+    """
+    client = get_opensearch_client()
     documents = [
         {
             "title": "Новости компании",
@@ -79,6 +109,18 @@ def seed_documents(index_name: str) -> int:
 
 
 def search_documents(index_name: str, query: str, content_type: Optional[str] = None):
+    """
+    Выполняет поиск документов в указанном индексе по ключевому слову.
+
+    Параметры:
+        index_name: имя индекса для поиска
+        query: поисковый запрос (ключевое слово)
+        content_type: опциональный фильтр по типу контента (article, blog, news, faq)
+
+    Поиск выполняется по полям title (с весом 2) и content (вес 1).
+    Результаты фильтруются по content_type если указан.
+    Возвращает список словарей с полями title и snippet (первые 50 символов content).
+    """
     client = get_opensearch_client()
     must_clauses = [
         {
